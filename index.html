@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Smart Pantry - ระบบติดตามวันหมดอายุวัตถุดิบ</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans (Eng/Numbers) & Noto Sans Thai (Thai) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+
+  
+  <!-- Alpine.js CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Custom Tailwind Config -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            jp: {
+              bg: '#FAF8F5',       // สีครีมสว่าง สไตล์มินิมอลญี่ปุ่น (Soft Warm White)
+              card: '#FFFFFF',     // สีขาวบริสุทธิ์สำหรับการ์ด
+              text: '#2D312E',     // สีเทาเข้มเกือบดำ สำหรับความสบายตา
+              muted: '#7A807C',    // สีเทาอมเขียวหม่น สำหรับข้อความรอง
+              border: '#EAE6DF',   // สีขอบนุ่มนวล
+              sage: {
+                light: '#F0F5F2',  // สีเขียวเซจอ่อนมากๆ สำหรับพื้นหลังเน้นย้ำ
+                DEFAULT: '#6E8E75',// สีเขียวเซจสไตล์อินทรีย์ญี่ปุ่น (Organic Sage Green)
+                dark: '#54725A',   // สีเขียวเซจเข้ม สำหรับ Hover
+              },
+              cream: {
+                light: '#FCFBF9',
+                DEFAULT: '#F5EFE6',// สีครีมพาสเทล
+                dark: '#E6DDD0',
+              }
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Noto Sans Thai', 'sans-serif'],
+          },
+          boxShadow: {
+            'soft': '0 4px 20px -2px rgba(138, 149, 141, 0.08), 0 2px 8px -1px rgba(138, 149, 141, 0.04)',
+            'soft-lg': '0 10px 25px -3px rgba(138, 149, 141, 0.12), 0 4px 12px -2px rgba(138, 149, 141, 0.06)',
+            'inner-soft': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.02)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar Styling to match clean aesthetic */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #FAF8F5;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #E0DAD0;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #B8B0A2;
+    }
+    
+    /* Hide scrollbar for Chrome, Safari and Opera */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    /* Hide scrollbar for IE, Edge and Firefox */
+    .no-scrollbar {
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
+    }
+
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body x-data="pantryApp()" x-init="init()" class="min-h-screen bg-jp-bg text-jp-text font-sans antialiased pb-16 relative">
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+    <template x-for="toast in toasts" :key="toast.id">
+      <div x-transition:enter="transition ease-out duration-300"
+           x-transition:enter-start="opacity-0 translate-y-2 transform"
+           x-transition:enter-end="opacity-100 translate-y-0 transform"
+           x-transition:leave="transition ease-in duration-200"
+           x-transition:leave-start="opacity-100 translate-y-0 transform"
+           x-transition:leave-end="opacity-0 translate-y-2 transform"
+           class="p-4 rounded-xl shadow-soft-lg flex items-center gap-3 pointer-events-auto border"
+           :class="{
+             'bg-emerald-50 text-emerald-800 border-emerald-100': toast.type === 'success',
+             'bg-rose-50 text-rose-800 border-rose-100': toast.type === 'error',
+             'bg-amber-50 text-amber-800 border-amber-100': toast.type === 'warning',
+             'bg-sky-50 text-sky-800 border-sky-100': toast.type === 'info',
+           }">
+        <!-- Icon -->
+        <span class="text-xl" x-text="
+          toast.type === 'success' ? '🟢' : 
+          toast.type === 'error' ? '🔴' : 
+          toast.type === 'warning' ? '🟡' : '💡'
+        "></span>
+        <!-- Message -->
+        <p class="text-xs md:text-sm font-medium flex-1" x-text="toast.message"></p>
+        <!-- Close Button -->
+        <button @click="toasts = toasts.filter(t => t.id !== toast.id)" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+    </template>
+  </div>
+
+  <!-- HEADER -->
+  <header class="bg-white border-b border-jp-border sticky top-0 z-30 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <!-- Minimal Refrigerator SVG Icon -->
+        <div class="bg-jp-sage-light p-2.5 rounded-xl text-jp-sage flex items-center justify-center">
+          <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+            <line x1="5" y1="11" x2="19" y2="11" />
+            <line x1="9" y1="5.5" x2="9" y2="8" />
+            <line x1="9" y1="14" x2="9" y2="17.5" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-xl md:text-2xl font-bold tracking-tight text-jp-text flex items-center gap-2">
+            My Smart Pantry
+          </h1>
+          <p class="text-[11px] md:text-xs text-jp-muted flex items-center gap-1.5 mt-0.5 font-medium">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-jp-sage animate-pulse"></span>
+            <span x-text="thaiTodayDate"></span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Add Button -->
+      <button @click="openAddModal()" class="flex items-center gap-2 bg-jp-sage hover:bg-jp-sage-dark text-white px-4 py-2 md:px-5 md:py-2.5 rounded-full font-semibold text-sm shadow-sm transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]">
+        <svg class="w-4 h-4 md:w-5 md:h-5 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        <span class="hidden sm:inline">เพิ่มวัตถุดิบ</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+
+    <!-- DASHBOARD SUMMARY BANNER -->
+    <div class="bg-jp-cream border border-jp-border/70 rounded-2xl p-4 md:p-6 mb-6 flex items-start sm:items-center gap-4 transition-all duration-300">
+      <div class="bg-white p-3 rounded-2xl shadow-soft text-2xl shrink-0 flex items-center justify-center">
+        💡
+      </div>
+      <div class="flex-1">
+        <h3 class="font-bold text-jp-text text-sm md:text-base" x-text="summaryMessage"></h3>
+        <p class="text-jp-muted text-[11px] md:text-xs mt-1 leading-relaxed">
+          ตรวจเช็กวันหมดอายุวัตถุดิบอย่างสม่ำเสมอ เพื่อลดขยะอาหาร (Food Waste) และดูแลสุขภาพของทุกคนในครอบครัว
+        </p>
+      </div>
+    </div>
+
+    <!-- SHARED FAMILY CLOUD SYNC PANEL (วิธีที่ 2 - Google Firebase) -->
+    <div class="bg-white border border-jp-border/60 rounded-2xl p-4 md:p-5 mb-6 shadow-soft transition-all">
+      <div class="flex flex-col justify-between gap-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex items-start gap-3">
+            <span class="text-2xl mt-0.5">🌐</span>
+            <div>
+              <h4 class="font-bold text-sm md:text-base text-jp-text flex items-center gap-2">
+                <span>แชร์ตู้เย็นในบ้าน (Family Cloud Sync via Firebase)</span>
+                <!-- Status Badge -->
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono"
+                      :class="{
+                        'bg-rose-50 text-rose-700 border border-rose-100': !firebaseConnected,
+                        'bg-gray-100 text-gray-500 border border-gray-200': firebaseConnected && !cloudId,
+                        'bg-jp-sage-light text-jp-sage-dark border border-jp-sage/20': firebaseConnected && cloudId && syncStatus === 'success',
+                        'bg-rose-50 text-rose-700 border border-rose-100': firebaseConnected && cloudId && syncStatus === 'error',
+                        'bg-amber-50 text-amber-700 border border-amber-100 animate-pulse': firebaseConnected && cloudId && syncStatus === 'loading'
+                      }" x-text="
+                        !firebaseConnected ? 'No Firebase' : 
+                        !cloudId ? 'Local Mode' : 
+                        syncStatus === 'loading' ? 'Syncing...' : 
+                        syncStatus === 'error' ? 'Failed' : 'Synced'
+                      ">
+                </span>
+              </h4>
+              <p class="text-[11px] text-jp-muted leading-relaxed mt-0.5">
+                ซิงก์ข้อมูลวัตถุดิบและของในตู้เย็นแบบเรียลไทม์ (Real-time) กับโทรศัพท์ของทุกคนในครอบครัวผ่านฐานข้อมูลส่วนตัวของคุณ
+              </p>
+            </div>
+          </div>
+
+          <!-- Section 1: Firebase NOT Connected -->
+          <div x-show="!firebaseConnected" class="flex flex-wrap items-center gap-2.5 pt-2 md:pt-0">
+            <button @click="showFirebaseConfig = !showFirebaseConfig" class="px-4 py-2 bg-jp-sage text-white rounded-full text-xs font-bold shadow-sm hover:bg-jp-sage-dark transition-all">
+              ⚙️ ตั้งค่าคลาวด์ส่วนตัว (Firebase)
+            </button>
+          </div>
+
+          <!-- Section 2: Firebase Connected but Sync NOT Enabled -->
+          <div x-show="firebaseConnected && !cloudId" x-cloak class="flex flex-wrap items-center gap-2.5 pt-2 md:pt-0">
+            <!-- Button to Create a New Cloud Bin -->
+            <button @click="createNewCloudPantry()" class="px-4 py-2 bg-jp-sage text-white rounded-full text-xs font-bold shadow-sm hover:bg-jp-sage-dark transition-all">
+              ✨ สร้างรหัสบ้านใหม่
+            </button>
+            
+            <!-- Connect with existing code input -->
+            <div class="flex items-center border border-jp-border rounded-full bg-jp-bg/30 pl-3.5 pr-1 py-1 w-full sm:w-auto mt-1 sm:mt-0">
+              <input type="text" x-model="inputCloudId" placeholder="ใส่รหัสแชร์ครอบครัวเดิม..." class="bg-transparent text-xs font-medium text-jp-text outline-none w-36 sm:w-40" />
+              <button @click="connectToFirebasePantry(inputCloudId.trim().toLowerCase())" class="px-3.5 py-1.5 bg-jp-cream hover:bg-jp-cream-dark text-jp-text rounded-full text-[10px] font-bold transition-all shrink-0">
+                เชื่อมต่อ
+              </button>
+            </div>
+          </div>
+
+
+          <!-- Section 3: Sync Enabled / Active Cloud ID -->
+          <div x-show="firebaseConnected && cloudId" x-cloak class="flex flex-col sm:flex-row sm:items-center justify-between md:justify-end gap-3 pt-2 md:pt-0 w-full md:w-auto">
+            <div class="flex flex-wrap items-center gap-3">
+              <!-- Share Code Display -->
+              <div class="flex items-center gap-2 bg-jp-sage-light/50 border border-jp-sage/20 px-3.5 py-2 rounded-xl">
+                <span class="text-[10px] font-bold text-jp-sage-dark uppercase shrink-0">รหัสแชร์ในบ้าน:</span>
+                <code class="text-xs font-bold text-jp-text tracking-wider font-mono select-all" x-text="showCloudId ? cloudId : 'pantry-••••••••'"></code>
+                
+                <!-- Toggle Show/Hide button -->
+                <button @click="showCloudId = !showCloudId" class="text-jp-sage/65 hover:text-jp-sage-dark p-0.5 transition-colors" title="แสดง/ซ่อนรหัส">
+                  <!-- Eye Icon (Show) -->
+                  <template x-if="!showCloudId">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  </template>
+                  <!-- Eye-Off Icon (Hide) -->
+                  <template x-if="showCloudId">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                  </template>
+                </button>
+
+                <!-- Copy button -->
+                <button @click="copyCloudId()" class="text-jp-sage hover:text-jp-sage-dark p-0.5" title="คัดลอกรหัส">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                </button>
+              </div>
+
+              <!-- Sync Time Display & Disconnect -->
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] font-medium" :class="syncStatus === 'error' ? 'text-rose-600 font-bold' : 'text-jp-muted'" x-text="
+                  syncStatus === 'error' ? '⚠️ เชื่อมต่อล้มเหลว (เช็กกฎการเข้าถึง)' :
+                  syncStatus === 'loading' ? '🔄 กำลังซิงก์...' :
+                  'ซิงก์เรียลไทม์ (ล่าสุด ' + lastSyncTime + ')'
+                "></span>
+                <!-- Disconnect Button -->
+                <button @click="disconnectCloud()" class="px-3 py-2 border border-rose-100 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-bold transition-all ml-1.5">
+                  ❌ เลิกแชร์
+                </button>
+              </div>
+            </div>
+            
+            <!-- Error message banner if database read fails -->
+            <template x-if="syncStatus === 'error'">
+              <div class="w-full text-left sm:text-right text-[10px] text-rose-600 font-medium mt-1 leading-relaxed">
+                *หากขึ้นสีแดงหรือล้มเหลว กรุณาตั้งค่า Rules ของ Realtime Database ใน Firebase Console เป็น true หรือตรวจสอบ Database URL ในส่วนตั้งค่าด้านล่างให้ถูกต้อง
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Firebase Configuration & Setup Guide -->
+        <div class="border-t border-jp-border/50 pt-3.5 mt-1 text-left">
+          <button @click="showFirebaseConfig = !showFirebaseConfig" class="text-xs font-bold text-jp-sage hover:text-jp-sage-dark flex items-center gap-1.5 transition-colors">
+            <span>⚙️ การเชื่อมต่อและการตั้งค่า Google Firebase ส่วนตัว (ฟรี 100%)</span>
+            <svg class="w-3.5 h-3.5 transition-transform" :class="{'rotate-180': showFirebaseConfig}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+          
+          <div x-show="showFirebaseConfig" x-collapse x-cloak class="mt-3 p-4 bg-jp-bg border border-jp-border/70 rounded-xl space-y-3">
+            <!-- Warning/Guide Alert Box -->
+            <div class="bg-amber-50 border border-amber-100 rounded-xl p-3.5 flex items-start gap-2.5">
+              <span class="text-lg">🔒</span>
+              <div class="text-[11px] text-amber-900 leading-relaxed">
+                <strong>ระบบคลาวด์ส่วนตัว Google Firebase (เชื่อมต่อง่าย ไม่ต้องใช้ Config ซับซ้อน)</strong> เพื่อตัดขั้นตอนยุ่งยากและปัญหาสลับรหัสโครงการ ทางเราได้อัปเดตให้เชื่อมต่อผ่านระบบ REST API ของเบราว์เซอร์โดยตรง **โดยคุณไม่จำเป็นต้องนำโค้ดตั้งค่ายาวๆ มาวางอีกต่อไป** ใช้เพียงแค่ลิงก์ฐานข้อมูล (Database URL) จุดเดียวเท่านั้นครับ!
+              </div>
+            </div>
+
+            <!-- Step by Step instructions -->
+            <h5 class="font-bold text-xs text-jp-text">ขั้นตอนการเชื่อมต่อฐานข้อมูล Firebase ของคุณ (ใช้เวลาไม่ถึง 1 นาที):</h5>
+            <ol class="list-decimal list-inside text-[11px] text-jp-muted space-y-2 pl-1.5 leading-relaxed font-medium">
+              <li>เปิดเว็บเบราว์เซอร์ไปที่: <a href="https://console.firebase.google.com" target="_blank" class="text-jp-sage font-bold underline hover:text-jp-sage-dark font-semibold">https://console.firebase.google.com</a></li>
+              <li>สร้างโครงการของคุณเอง จากนั้นกดเมนูด้านซ้าย **Build** > **Realtime Database** และกดปุ่ม **Create Database**</li>
+              <li><strong>สำคัญ:</strong> ในขั้นตอนสิทธิ์การเข้าถึง (Security Rules) ให้เลือก **Start in test mode** (เริ่มต้นในโหมดทดสอบ) เพื่อให้แอปเขียนอ่านได้ และกด **Enable** (หรือในแท็บ Rules ด้านบนเป็น `.read: true` และ `.write: true` แล้วกด Publish)</li>
+              <li>ในหน้า Realtime Database คัดลอกลิงก์ตรงแถบสีขาวด้านบนสุด (เช่น <code class="font-mono bg-white px-1 py-0.5 rounded border">https://[ชื่อโครงการ]-default-rtdb.firebaseio.com/</code>) มาวางใส่ในช่องด้านล่างนี้ได้เลยครับ!</li>
+            </ol>
+
+            <!-- Textarea paste and Save/Reset button -->
+            <div class="space-y-2.5 max-w-xl pt-2">
+              <div>
+                <label class="block text-[11px] font-bold text-jp-text mb-1 flex items-center gap-1">
+                  <span>ลิงก์ Realtime Database URL (คัดลอกจากแถบสีขาวบนหน้าจอ Realtime Database):</span>
+                  <span class="text-rose-500 font-bold">*จำเป็น</span>
+                </label>
+                <input type="text" x-model="customDatabaseURL" placeholder="เช่น https://my-smart-pantry-default-rtdb.firebaseio.com/" class="w-full px-3 py-2 text-xs rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-mono text-jp-text bg-white shadow-inner-soft" />
+              </div>
+              
+              <!-- Active Database URL Display -->
+              <div x-show="firebaseConnected" class="text-[10px] text-jp-muted bg-jp-bg/50 p-2 rounded-lg border border-jp-border/40 font-medium">
+                <span>🔗 ลิงก์ฐานข้อมูลที่ระบบกำลังเรียกใช้:</span>
+                <code class="block mt-0.5 font-mono text-[9px] text-jp-text select-all break-all" x-text="databaseURL"></code>
+              </div>
+              
+              <div class="flex items-center gap-2 pt-1">
+                <button @click="saveFirebaseConfig()" class="px-4 py-2 bg-jp-sage hover:bg-jp-sage-dark text-white rounded-xl text-xs font-bold transition-all shadow-sm">
+                  💾 บันทึกและเชื่อมต่อ Firebase
+                </button>
+                <button x-show="firebaseConnected" @click="resetFirebaseConfig()" class="px-4 py-2 border border-rose-100 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-bold transition-all">
+                  🗑️ ล้างข้อมูลเชื่อมต่อทั้งหมด
+                </button>
+              </div>
+            </div>
+            
+            <p x-show="firebaseConnected" x-cloak class="text-[10px] text-emerald-700 font-bold flex items-center gap-1.5 pt-1">
+              <span>✅ กำลังใช้งานฐานข้อมูล Firebase ส่วนตัวของคุณในการเชื่อมต่อคลาวด์</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS COUNTER GRID -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <!-- Total Item Card -->
+      <div @click="selectedStatus = 'all'" class="cursor-pointer bg-white border border-jp-border/50 rounded-2xl p-4 shadow-soft hover:shadow-md transition-all flex items-center justify-between" :class="{'ring-2 ring-jp-sage bg-jp-sage-light/10': selectedStatus === 'all'}">
+        <div>
+          <p class="text-xs text-jp-muted font-medium">วัตถุดิบทั้งหมด</p>
+          <p class="text-2xl font-bold mt-1 text-jp-text" x-text="summaryStats.total"></p>
+        </div>
+        <span class="text-2xl opacity-80">📦</span>
+      </div>
+
+      <!-- Expired Card -->
+      <div @click="selectedStatus = selectedStatus === 'red' ? 'all' : 'red'" class="cursor-pointer bg-rose-50/50 border border-rose-100 rounded-2xl p-4 shadow-soft hover:shadow-md hover:bg-rose-50 transition-all flex items-center justify-between" :class="{'ring-2 ring-rose-300 bg-rose-50': selectedStatus === 'red'}">
+        <div>
+          <p class="text-xs text-rose-700 font-semibold flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span> หมดอายุแล้ว
+          </p>
+          <p class="text-2xl font-bold mt-1 text-rose-700" x-text="summaryStats.expired"></p>
+        </div>
+        <span class="text-2xl">🔴</span>
+      </div>
+
+      <!-- Expiring Soon Card -->
+      <div @click="selectedStatus = selectedStatus === 'yellow' ? 'all' : 'yellow'" class="cursor-pointer bg-amber-50/50 border border-amber-100 rounded-2xl p-4 shadow-soft hover:shadow-md hover:bg-amber-50 transition-all flex items-center justify-between" :class="{'ring-2 ring-amber-300 bg-amber-50': selectedStatus === 'yellow'}">
+        <div>
+          <p class="text-xs text-amber-700 font-semibold flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span> ใกล้หมดอายุ (&lt;3 วัน)
+          </p>
+          <p class="text-2xl font-bold mt-1 text-amber-700" x-text="summaryStats.expiringSoon"></p>
+        </div>
+        <span class="text-2xl">🟡</span>
+      </div>
+
+      <!-- Fresh Card -->
+      <div @click="selectedStatus = selectedStatus === 'green' ? 'all' : 'green'" class="cursor-pointer bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 shadow-soft hover:shadow-md hover:bg-emerald-50 transition-all flex items-center justify-between" :class="{'ring-2 ring-emerald-300 bg-emerald-50': selectedStatus === 'green'}">
+        <div>
+          <p class="text-xs text-emerald-700 font-semibold flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> ยังสดใหม่
+          </p>
+          <p class="text-2xl font-bold mt-1 text-emerald-700" x-text="summaryStats.fresh"></p>
+        </div>
+        <span class="text-2xl">🟢</span>
+      </div>
+    </div>
+
+    <!-- FOOD STORAGE GUIDE (ACCORDION) -->
+    <div class="bg-white border border-jp-border/60 rounded-2xl mb-6 shadow-soft overflow-hidden">
+      <button @click="showGuide = !showGuide" class="w-full px-5 py-4 flex items-center justify-between bg-white hover:bg-jp-cream-light transition-colors text-left">
+        <div class="flex items-center gap-2.5">
+          <span class="text-xl">📖</span>
+          <span class="font-bold text-sm md:text-base text-jp-text">คู่มือแนะนำการเก็บรักษาวัตถุดิบและอายุการเก็บรักษา</span>
+        </div>
+        <svg class="w-5 h-5 text-jp-muted transition-transform duration-200" :class="{'rotate-180': showGuide}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+      </button>
+      
+      <div x-show="showGuide" x-collapse x-cloak class="border-t border-jp-border/40 p-5 bg-jp-cream-light">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <template x-for="cat in categories" :key="cat.id">
+            <div class="bg-white border border-jp-border/50 rounded-xl p-4 flex flex-col justify-between shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
+              <div>
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-2xl" x-text="cat.icon"></span>
+                  <h4 class="font-bold text-xs md:text-sm text-jp-text" x-text="cat.name"></h4>
+                </div>
+                <p class="text-[11px] leading-relaxed text-jp-muted" x-text="cat.guideText"></p>
+              </div>
+              <div class="mt-3 pt-2.5 border-t border-jp-border/30 flex items-center justify-between">
+                <span class="text-[10px] font-bold text-jp-sage uppercase">ระยะเวลาแนะนำ</span>
+                <span class="text-xs font-bold text-jp-sage-dark bg-jp-sage-light px-2 py-0.5 rounded-full" x-text="cat.defaultDays + ' วัน'"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+        
+        <!-- Quick Fridge Storage Tips -->
+        <div class="mt-5 p-4 bg-jp-sage-light/40 border border-jp-sage/10 rounded-xl flex flex-col sm:flex-row sm:items-center gap-3">
+          <span class="text-2xl shrink-0">❄️</span>
+          <div>
+            <h5 class="font-bold text-xs md:text-sm text-jp-sage-dark">เคล็ดลับการจัดเก็บสไตล์มินิมอลญี่ปุ่น:</h5>
+            <p class="text-[11px] md:text-xs text-jp-muted leading-relaxed mt-0.5">
+              ไม่ควรนำนมสดหรือไข่ไก่ไว้ที่บริเวณฝาตู้เย็นเนื่องจากเป็นจุดที่มีการเปิดปิดบ่อยและอุณหภูมิไม่คงที่, ควรเก็บในชั้นวางปกติแถวบนหรือชั้นกลาง และล้างกล่องหรือเช็ดเศษดินของผักออกก่อนเข้าแช่ช่องผักเพื่อยืดอายุนานขึ้น
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FILTER & SORT CONTROLS -->
+    <div class="bg-white border border-jp-border/50 rounded-2xl p-4 md:p-5 mb-6 shadow-soft">
+      <div class="flex flex-col gap-4">
+        
+        <!-- Search and Sorting -->
+        <div class="flex flex-col sm:flex-row items-center gap-3">
+          <!-- Search Input -->
+          <div class="relative w-full sm:flex-1">
+            <svg class="absolute left-4 top-3.5 h-4 w-4 text-jp-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input type="text" x-model="searchQuery" placeholder="ค้นหาวัตถุดิบด้วยชื่อ หรือหมายเหตุ..." class="w-full pl-11 pr-4 py-2.5 rounded-full border border-jp-border focus:outline-none focus:ring-2 focus:ring-jp-sage focus:border-transparent text-sm bg-jp-bg/30 text-jp-text placeholder-jp-muted/70 transition-all font-medium" />
+            <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-4 top-3.5 text-jp-muted hover:text-jp-text text-xs">✕</button>
+          </div>
+          
+          <!-- Sort Dropdown -->
+          <div class="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <span class="text-xs font-semibold text-jp-muted shrink-0 hidden md:inline">จัดเรียงตาม:</span>
+            <select x-model="sortBy" class="w-full sm:w-auto px-4 py-2.5 rounded-full border border-jp-border focus:outline-none focus:ring-2 focus:ring-jp-sage text-sm bg-white font-medium text-jp-text shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+              <option value="expiryAsc">วันหมดอายุ (ใกล้หมดอายุก่อน)</option>
+              <option value="expiryDesc">วันหมดอายุ (ไกลสุดก่อน)</option>
+              <option value="nameAsc">ชื่อวัตถุดิบ (ก - ฮ)</option>
+              <option value="purchaseDesc">วันที่ซื้อ (ใหม่ล่าสุดก่อน)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Horizontal Category Filters -->
+        <div>
+          <p class="text-[11px] font-bold text-jp-muted mb-2 px-1">หมวดหมู่สินค้า</p>
+          <div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+            <button @click="selectedCategory = 'all'" class="px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-semibold transition-all shrink-0"
+                    :class="selectedCategory === 'all' ? 'bg-jp-sage text-white shadow-sm' : 'bg-jp-bg text-jp-muted hover:bg-jp-cream border border-jp-border/30'">
+              📦 ทั้งหมด
+            </button>
+            <template x-for="cat in categories" :key="cat.id">
+              <button @click="selectedCategory = cat.id" class="px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-semibold transition-all shrink-0"
+                      :class="selectedCategory === cat.id ? 'bg-jp-sage text-white shadow-sm' : 'bg-jp-bg text-jp-muted hover:bg-jp-cream border border-jp-border/30'">
+                <span x-text="cat.icon + ' ' + cat.name"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Active Filters Status Alert bar -->
+        <div x-show="selectedStatus !== 'all' || selectedCategory !== 'all' || searchQuery !== ''" x-cloak class="flex items-center justify-between bg-jp-sage-light/50 border border-jp-sage/10 rounded-xl px-4 py-2">
+          <div class="flex items-center gap-2 text-[11px] font-semibold text-jp-sage-dark">
+            <span>กำลังกรองข้อมูลด้วยเงื่อนไขพิเศษ</span>
+            <span class="bg-white/80 px-2.5 py-0.5 rounded-full border border-jp-sage/10" x-text="
+              (selectedStatus === 'red' ? 'สถานะ: หมดอายุแล้ว' : 
+               selectedStatus === 'yellow' ? 'สถานะ: ใกล้หมดอายุ' : 
+               selectedStatus === 'green' ? 'สถานะ: ยังสดใหม่' : '') + 
+              (selectedCategory !== 'all' ? (selectedStatus !== 'all' ? ' + ' : '') + 'หมวดหมู่: ' + categories.find(c => c.id === selectedCategory).name : '') +
+              (searchQuery !== '' ? ((selectedStatus !== 'all' || selectedCategory !== 'all') ? ' + ' : '') + 'คำค้นหา: &quot;' + searchQuery + '&quot;' : '')
+            "></span>
+          </div>
+          <button @click="resetFilters()" class="text-xs font-bold text-jp-sage hover:underline">ล้างตัวกรอง</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- INVENTORY CARD GRID -->
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-bold text-base md:text-lg text-jp-text flex items-center gap-2">
+          <span>รายการตู้เย็น</span>
+          <span class="text-xs font-bold bg-jp-cream px-2.5 py-0.5 rounded-full text-jp-muted font-mono" x-text="filteredItems.length"></span>
+        </h2>
+      </div>
+
+      <!-- Empty State -->
+      <div x-show="filteredItems.length === 0" x-cloak class="bg-white border border-jp-border/50 rounded-2xl p-12 text-center shadow-soft max-w-sm mx-auto my-8">
+        <span class="text-5xl inline-block mb-4 animate-bounce">🧊</span>
+        <h3 class="font-bold text-jp-text text-sm md:text-base">ไม่มีของในรายการที่เลือก</h3>
+        <p class="text-xs text-jp-muted mt-2 leading-relaxed">
+          ตู้เย็นของคุณอาจจะว่างเปล่า หรือตัวกรองที่คุณกำลังใช้อยู่ไม่มีข้อมูลที่ตรงกัน ลองเพิ่มของใหม่หรือล้างตัวกรอง
+        </p>
+        <div class="mt-6 flex flex-wrap justify-center gap-3">
+          <button @click="resetFilters()" class="text-xs font-bold text-jp-sage border border-jp-sage hover:bg-jp-sage-light px-4 py-2 rounded-full transition-colors">
+            ล้างตัวกรองทั้งหมด
+          </button>
+          <button @click="openAddModal()" class="text-xs font-bold bg-jp-sage hover:bg-jp-sage-dark text-white px-4 py-2 rounded-full transition-colors shadow-sm">
+            เพิ่มวัตถุดิบใหม่
+          </button>
+        </div>
+      </div>
+
+      <!-- Cards Grid -->
+      <div x-show="filteredItems.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <template x-for="item in filteredItems" :key="item.id">
+          <!-- Ingredient Card -->
+          <div class="bg-white border border-jp-border/40 rounded-2xl shadow-soft hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between overflow-hidden"
+               :class="{
+                 'border-l-[5px] border-l-rose-400 bg-gradient-to-r from-rose-50/10 to-transparent': getStatusColor(getDaysLeft(item.expiryDate)) === 'red',
+                 'border-l-[5px] border-l-amber-400 bg-gradient-to-r from-amber-50/10 to-transparent': getStatusColor(getDaysLeft(item.expiryDate)) === 'yellow',
+                 'border-l-[5px] border-l-emerald-400 bg-gradient-to-r from-emerald-50/10 to-transparent': getStatusColor(getDaysLeft(item.expiryDate)) === 'green'
+               }">
+            
+            <div class="p-5">
+              <!-- Header Card Info: Emoji, Name, Status Badge -->
+              <div class="flex items-start justify-between gap-2 mb-3">
+                <div class="flex items-center gap-3">
+                  <!-- Larger Emoji Container -->
+                  <div class="w-11 h-11 shrink-0 bg-jp-bg rounded-xl flex items-center justify-center text-2xl shadow-inner-soft">
+                    <span x-text="item.emoji"></span>
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-sm md:text-base text-jp-text leading-tight" x-text="item.name"></h3>
+                    <span class="inline-block text-[10px] font-semibold text-jp-muted bg-jp-bg border border-jp-border/40 px-2 py-0.5 rounded-md mt-1" x-text="categories.find(c => c.id === item.category)?.name || 'อื่นๆ'"></span>
+                  </div>
+                </div>
+                
+                <!-- Status Badge -->
+                <span class="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 uppercase tracking-wider font-mono"
+                      :class="{
+                        'bg-rose-100 text-rose-800 border border-rose-200': getStatusColor(getDaysLeft(item.expiryDate)) === 'red',
+                        'bg-amber-100 text-amber-800 border border-amber-200': getStatusColor(getDaysLeft(item.expiryDate)) === 'yellow',
+                        'bg-emerald-100 text-emerald-800 border border-emerald-200': getStatusColor(getDaysLeft(item.expiryDate)) === 'green'
+                      }" x-text="getStatusColor(getDaysLeft(item.expiryDate)) === 'red' ? 'Expired' : getStatusColor(getDaysLeft(item.expiryDate)) === 'yellow' ? 'Urgent' : 'Fresh'">
+                </span>
+              </div>
+
+              <!-- Expiry Count Info -->
+              <div class="mb-4">
+                <div class="text-xs md:text-sm font-bold flex items-center gap-1.5"
+                     :class="{
+                       'text-rose-600': getStatusColor(getDaysLeft(item.expiryDate)) === 'red',
+                       'text-amber-600': getStatusColor(getDaysLeft(item.expiryDate)) === 'yellow',
+                       'text-emerald-600': getStatusColor(getDaysLeft(item.expiryDate)) === 'green'
+                     }">
+                  <span class="text-base" x-text="
+                    getStatusColor(getDaysLeft(item.expiryDate)) === 'red' ? '🔴' : 
+                    getStatusColor(getDaysLeft(item.expiryDate)) === 'yellow' ? '🟡' : '🟢'
+                  "></span>
+                  <span class="font-bold tracking-tight text-xs md:text-sm" x-text="getStatusText(getDaysLeft(item.expiryDate))"></span>
+                </div>
+              </div>
+
+              <!-- Secondary Details -->
+              <div class="space-y-1.5 text-[11px] text-jp-muted border-t border-jp-border/30 pt-3">
+                <div class="flex items-center justify-between">
+                  <span>📅 วันที่นำเข้าตู้เย็น:</span>
+                  <span class="font-medium text-jp-text" x-text="formatThaiDate(item.purchaseDate)"></span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span>⏰ วันที่ควรบริโภคก่อน:</span>
+                  <span class="font-medium text-jp-text" x-text="formatThaiDate(item.expiryDate)"></span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span>🔢 จำนวนคงเหลือ:</span>
+                  <span class="font-semibold text-jp-text" x-text="item.quantity + ' ชิ้น/ชุด'"></span>
+                </div>
+                <div x-show="item.notes" class="mt-2 pt-1.5 border-t border-jp-border/20 text-left">
+                  <p class="text-[10px] text-jp-muted italic leading-relaxed" x-text="'📝 โน้ต: ' + item.notes"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons Footer -->
+            <div class="bg-jp-bg/50 border-t border-jp-border/40 px-4 py-3 flex items-center justify-between gap-2 shrink-0">
+              <!-- Mark as Eaten Button -->
+              <button @click="consumeItem(item.id, item.name)" class="flex-1 bg-jp-sage hover:bg-jp-sage-dark text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm">
+                <svg class="w-3.5 h-3.5 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                <span>ทานแล้ว</span>
+              </button>
+              
+              <div class="flex items-center gap-1">
+                <!-- Edit Button -->
+                <button @click="openEditModal(item)" class="p-1.5 text-jp-muted hover:text-jp-text bg-white hover:bg-jp-cream rounded-lg border border-jp-border/50 transition-colors" title="แก้ไข">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                </button>
+                
+                <!-- Delete Button -->
+                <button @click="deleteItem(item.id, item.name)" class="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 bg-white border border-rose-100 rounded-lg transition-colors" title="ลบ">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </template>
+      </div>
+    </div>
+  </main>
+
+  <!-- ADD ITEM MODAL -->
+  <div x-show="showAddModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" x-transition>
+    <!-- Backdrop -->
+    <div @click="showAddModal = false" class="absolute inset-0 bg-black/30 backdrop-blur-[3px] transition-opacity"></div>
+    
+    <!-- Modal Card -->
+    <div class="relative bg-white rounded-2xl max-w-md w-full p-6 shadow-soft-lg z-10 border border-jp-border/50 transform transition-all flex flex-col max-h-[90vh]">
+      <!-- Close button -->
+      <button @click="showAddModal = false" class="absolute right-4 top-4 text-jp-muted hover:text-jp-text transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+
+      <div class="mb-4">
+        <h3 class="text-lg font-bold text-jp-text flex items-center gap-2">
+          <span>➕ เพิ่มวัตถุดิบใหม่</span>
+        </h3>
+        <p class="text-xs text-jp-muted mt-0.5">ระบุรายละเอียดวัตถุดิบเพื่อบันทึกลงตู้เย็น</p>
+      </div>
+
+      <!-- Scrollable Form Content -->
+      <div class="flex-1 overflow-y-auto pr-1 space-y-4">
+        <!-- Name -->
+        <div>
+          <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">ชื่อวัตถุดิบ <span class="text-rose-500 font-bold">*</span></label>
+          <input type="text" x-model="formData.name" placeholder="ตัวอย่าง: นมสด, เนื้อหมู, มะเขือเทศ" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage focus:border-transparent outline-none font-medium" />
+        </div>
+
+        <!-- Emoji Picker Input -->
+        <div>
+          <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">ไอคอนอีโมจิ</label>
+          <div class="flex items-center gap-3">
+            <!-- Selected Emoji -->
+            <div class="w-12 h-12 bg-jp-bg rounded-xl flex items-center justify-center text-2xl border border-jp-border/50 shrink-0 font-medium">
+              <span x-text="formData.emoji"></span>
+            </div>
+            <!-- Quick Emoji list -->
+            <div class="flex-1 overflow-x-auto py-1 flex items-center gap-1.5 no-scrollbar border border-jp-border/40 rounded-xl px-2.5 bg-jp-bg/30">
+              <template x-for="em in commonEmojis">
+                <button @click="formData.emoji = em" class="text-xl p-1.5 rounded-lg hover:bg-white active:scale-95 transition-all text-center" :class="{'bg-white shadow-soft ring-1 ring-jp-border': formData.emoji === em}" x-text="em"></button>
+              </template>
+            </div>
+          </div>
+          <!-- Custom Emoji Option -->
+          <div class="mt-2 flex items-center gap-2">
+            <span class="text-[10px] text-jp-muted">ป้อนอีโมจิอื่นๆ:</span>
+            <input type="text" x-model="formData.emoji" maxlength="4" class="w-12 px-2 py-0.5 text-center text-xs rounded border border-jp-border focus:ring-1 focus:ring-jp-sage outline-none font-medium" />
+          </div>
+        </div>
+
+        <!-- Category -->
+        <div>
+          <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">หมวดหมู่</label>
+          <select x-model="formData.category" @change="onCategoryChange()" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-medium text-jp-text">
+            <template x-for="cat in categories" :key="cat.id">
+              <option :value="cat.id" x-text="cat.icon + ' ' + cat.name"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- Purchase & Expiry Date -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">วันที่ซื้อ</label>
+            <input type="date" x-model="formData.purchaseDate" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-medium text-jp-text" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">วันหมดอายุ <span class="text-rose-500 font-bold">*</span></label>
+            <input type="date" x-model="formData.expiryDate" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-medium text-jp-text" />
+          </div>
+        </div>
+
+        <!-- SMART EXPIRY GUIDE HELPER -->
+        <div class="bg-jp-sage-light/60 border border-jp-sage/10 rounded-xl p-3.5">
+          <div class="flex items-start gap-2">
+            <span class="text-base">💡</span>
+            <div class="flex-1">
+              <span class="text-[10px] font-bold text-jp-sage-dark uppercase tracking-wider">คำแนะนำระยะเวลาเก็บ:</span>
+              <p class="text-[11px] text-jp-muted leading-relaxed mt-0.5" x-text="currentCategoryInfo?.guideText"></p>
+              
+              <!-- Autofill Button -->
+              <button @click="applyRecommendedExpiry()" type="button" class="mt-2.5 flex items-center justify-center gap-1.5 bg-white hover:bg-jp-sage hover:text-white border border-jp-sage/20 text-jp-sage-dark px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all w-full shadow-inner-soft">
+                <span>🗓️ คำนวณวันหมดอายุอัตโนมัติ (+<span x-text="currentCategoryInfo?.defaultDays"></span> วัน)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quantity & Notes -->
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-1">
+            <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">จำนวน</label>
+            <div class="flex items-center">
+              <button @click="formData.quantity = Math.max(1, formData.quantity - 1)" class="px-2.5 py-2 bg-jp-bg border border-jp-border border-r-0 rounded-l-xl text-jp-text hover:bg-jp-cream font-bold text-xs">-</button>
+              <input type="number" x-model.number="formData.quantity" min="1" class="w-full px-1 py-2 text-center text-sm border border-jp-border outline-none font-semibold text-jp-text" />
+              <button @click="formData.quantity = formData.quantity + 1" class="px-2.5 py-2 bg-jp-bg border border-jp-border border-l-0 rounded-r-xl text-jp-text hover:bg-jp-cream font-bold text-xs">+</button>
+            </div>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">โน้ต / หมายเหตุอื่นๆ</label>
+            <input type="text" x-model="formData.notes" placeholder="เช่น แช่ช่องฟรีซ, ปิดถุงให้สนิท" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage focus:border-transparent outline-none font-medium" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons Footer -->
+      <div class="mt-6 pt-4 border-t border-jp-border/40 flex items-center gap-3 shrink-0">
+        <button @click="showAddModal = false" class="flex-1 px-4 py-2.5 border border-jp-border hover:bg-jp-bg text-jp-muted font-bold text-sm rounded-full transition-colors">
+          ยกเลิก
+        </button>
+        <button @click="submitAdd()" class="flex-1 px-4 py-2.5 bg-jp-sage hover:bg-jp-sage-dark text-white font-bold text-sm rounded-full transition-colors shadow-sm">
+          เพิ่มลงตู้เย็น
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT ITEM MODAL -->
+  <div x-show="showEditModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" x-transition>
+    <!-- Backdrop -->
+    <div @click="showEditModal = false" class="absolute inset-0 bg-black/30 backdrop-blur-[3px] transition-opacity"></div>
+    
+    <!-- Modal Card -->
+    <div class="relative bg-white rounded-2xl max-w-md w-full p-6 shadow-soft-lg z-10 border border-jp-border/50 transform transition-all flex flex-col max-h-[90vh]">
+      <!-- Close button -->
+      <button @click="showEditModal = false" class="absolute right-4 top-4 text-jp-muted hover:text-jp-text transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+
+      <div class="mb-4">
+        <h3 class="text-lg font-bold text-jp-text flex items-center gap-2">
+          <span>✏️ แก้ไขข้อมูลวัตถุดิบ</span>
+        </h3>
+        <p class="text-xs text-jp-muted mt-0.5">ปรับแต่งรายละเอียดวัตถุดิบของคุณด้านล่าง</p>
+      </div>
+
+      <!-- Scrollable Form Content -->
+      <div class="flex-1 overflow-y-auto pr-1 space-y-4">
+        <!-- Name -->
+        <div>
+          <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">ชื่อวัตถุดิบ <span class="text-rose-500 font-bold">*</span></label>
+          <input type="text" x-model="formData.name" placeholder="ตัวอย่าง: นมสด" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage focus:border-transparent outline-none font-medium" />
+        </div>
+
+        <!-- Emoji Picker Input -->
+        <div>
+          <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">ไอคอนอีโมจิ</label>
+          <div class="flex items-center gap-3">
+            <!-- Selected Emoji -->
+            <div class="w-12 h-12 bg-jp-bg rounded-xl flex items-center justify-center text-2xl border border-jp-border/50 shrink-0 font-medium">
+              <span x-text="formData.emoji"></span>
+            </div>
+            <!-- Quick Emoji list -->
+            <div class="flex-1 overflow-x-auto py-1 flex items-center gap-1.5 no-scrollbar border border-jp-border/40 rounded-xl px-2.5 bg-jp-bg/30">
+              <template x-for="em in commonEmojis">
+                <button @click="formData.emoji = em" class="text-xl p-1.5 rounded-lg hover:bg-white active:scale-95 transition-all text-center" :class="{'bg-white shadow-soft ring-1 ring-jp-border': formData.emoji === em}" x-text="em"></button>
+              </template>
+            </div>
+          </div>
+          <!-- Custom Emoji Option -->
+          <div class="mt-2 flex items-center gap-2">
+            <span class="text-[10px] text-jp-muted">ป้อนอีโมจิอื่นๆ:</span>
+            <input type="text" x-model="formData.emoji" maxlength="4" class="w-12 px-2 py-0.5 text-center text-xs rounded border border-jp-border focus:ring-1 focus:ring-jp-sage outline-none font-medium" />
+          </div>
+        </div>
+
+        <!-- Category -->
+        <div>
+          <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">หมวดหมู่</label>
+          <select x-model="formData.category" @change="onCategoryChange()" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-medium text-jp-text">
+            <template x-for="cat in categories" :key="cat.id">
+              <option :value="cat.id" x-text="cat.icon + ' ' + cat.name"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- Purchase & Expiry Date -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">วันที่ซื้อ</label>
+            <input type="date" x-model="formData.purchaseDate" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-medium text-jp-text" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">วันหมดอายุ <span class="text-rose-500 font-bold">*</span></label>
+            <input type="date" x-model="formData.expiryDate" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-medium text-jp-text" />
+          </div>
+        </div>
+
+        <!-- SMART EXPIRY GUIDE HELPER -->
+        <div class="bg-jp-sage-light/60 border border-jp-sage/10 rounded-xl p-3.5">
+          <div class="flex items-start gap-2">
+            <span class="text-base">💡</span>
+            <div class="flex-1">
+              <span class="text-[10px] font-bold text-jp-sage-dark uppercase tracking-wider">คำแนะนำระยะเวลาเก็บ:</span>
+              <p class="text-[11px] text-jp-muted leading-relaxed mt-0.5" x-text="currentCategoryInfo?.guideText"></p>
+              
+              <!-- Autofill Button -->
+              <button @click="applyRecommendedExpiry()" type="button" class="mt-2.5 flex items-center justify-center gap-1.5 bg-white hover:bg-jp-sage hover:text-white border border-jp-sage/20 text-jp-sage-dark px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all w-full shadow-inner-soft">
+                <span>🗓️ คำนวณวันหมดอายุอัตโนมัติ (+<span x-text="currentCategoryInfo?.defaultDays"></span> วัน)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quantity & Notes -->
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-1">
+            <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">จำนวน</label>
+            <div class="flex items-center">
+              <button @click="formData.quantity = Math.max(1, formData.quantity - 1)" class="px-2.5 py-2 bg-jp-bg border border-jp-border border-r-0 rounded-l-xl text-jp-text hover:bg-jp-cream font-bold text-xs">-</button>
+              <input type="number" x-model.number="formData.quantity" min="1" class="w-full px-1 py-2 text-center text-sm border border-jp-border outline-none font-semibold text-jp-text" />
+              <button @click="formData.quantity = formData.quantity + 1" class="px-2.5 py-2 bg-jp-bg border border-jp-border border-l-0 rounded-r-xl text-jp-text hover:bg-jp-cream font-bold text-xs">+</button>
+            </div>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs font-bold text-jp-text mb-1.5 font-semibold">โน้ต / หมายเหตุอื่นๆ</label>
+            <input type="text" x-model="formData.notes" placeholder="เช่น แช่ช่องฟรีซ, ปิดถุงให้สนิท" class="w-full px-3.5 py-2 text-sm rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage focus:border-transparent outline-none font-medium" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons Footer -->
+      <div class="mt-6 pt-4 border-t border-jp-border/40 flex items-center gap-3 shrink-0">
+        <button @click="showEditModal = false" class="flex-1 px-4 py-2.5 border border-jp-border hover:bg-jp-bg text-jp-muted font-bold text-sm rounded-full transition-colors">
+          ยกเลิก
+        </button>
+        <button @click="submitEdit()" class="flex-1 px-4 py-2.5 bg-jp-sage hover:bg-jp-sage-dark text-white font-bold text-sm rounded-full transition-colors shadow-sm">
+          บันทึกการแก้ไข
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GENERATED CODE MODAL -->
+  <div x-show="showCodeModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" x-transition>
+    <!-- Backdrop -->
+    <div @click="showCodeModal = false" class="absolute inset-0 bg-black/30 backdrop-blur-[3px] transition-opacity"></div>
+    
+    <!-- Modal Card -->
+    <div class="relative bg-white rounded-2xl max-w-sm w-full p-6 shadow-soft-lg z-10 border border-jp-border/50 transform transition-all flex flex-col items-center text-center">
+      <!-- Close button -->
+      <button @click="showCodeModal = false" class="absolute right-4 top-4 text-jp-muted hover:text-jp-text transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+
+      <!-- Icon -->
+      <div class="w-16 h-16 bg-jp-sage-light text-jp-sage rounded-full flex items-center justify-center text-3xl mb-4 shadow-inner-soft">
+        🔑
+      </div>
+
+      <h3 class="text-lg font-bold text-jp-text">สร้างรหัสแชร์ตู้เย็นสำเร็จ!</h3>
+      <p class="text-xs text-jp-muted mt-1.5 max-w-xs leading-relaxed font-medium">
+        กรุณาคัดลอกรหัสนี้ส่งให้สมาชิกในบ้านของคุณเพื่อเชื่อมต่อและใช้งานตู้เย็นเดียวกันแบบเรียลไทม์
+      </p>
+
+      <!-- Code Box -->
+      <div class="w-full mt-5 p-4 bg-jp-bg border border-jp-border rounded-xl flex items-center justify-between gap-3 font-mono">
+        <span class="text-sm font-bold text-jp-text tracking-wider select-all" x-text="generatedCode"></span>
+        <button @click="copyCloudId(); addToast('คัดลอกรหัสสำเร็จ!', 'success')" class="px-3 py-1.5 bg-jp-sage hover:bg-jp-sage-dark text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-sm shrink-0">
+          📋 คัดลอก
+        </button>
+      </div>
+
+      <button @click="showCodeModal = false" class="w-full mt-6 py-2.5 bg-jp-cream hover:bg-jp-cream-dark text-jp-text font-bold text-sm rounded-full transition-colors">
+        ตกลง
+      </button>
+    </div>
+  </div>
+
+  <footer class="mt-12 py-6 border-t border-jp-border text-center text-xs text-jp-muted">
+    <div class="max-w-7xl mx-auto px-4">
+      <p class="font-bold">My Smart Pantry - Fridge & Pantry Expiry Tracker</p>
+      <p class="mt-1 font-normal opacity-85">ออกแบบด้วยสไตล์มินิมอลญี่ปุ่น Fresh & Clean เพื่อการดูแลครัวเรือนที่ดีกว่าเดิม 🌾</p>
+    </div>
+  </footer>
+
+  <script>
+    function pantryApp() {
+      return {
+        items: [],
+        searchQuery: '',
+        selectedCategory: 'all',
+        selectedStatus: 'all',
+        sortBy: 'expiryAsc',
+        showAddModal: false,
+        showEditModal: false,
+        showGuide: false,
+        showCodeModal: false,
+        generatedCode: '',
+        
+        // Firebase Cloud Sync States
+        cloudSyncEnabled: false,
+        cloudId: '',
+        inputCloudId: '',
+        syncStatus: 'success',
+        lastSyncTime: '-',
+        showCloudId: false,
+        
+        // Firebase Configuration States
+        showFirebaseConfig: false,
+        customDatabaseURL: '',
+        databaseURL: '',
+        firebaseConnected: false,
+        eventSource: null,
+        
+        // Form Inputs Model
+        formData: {
+          id: '',
+          name: '',
+          emoji: '🥛',
+          category: 'dairy',
+          expiryDate: '',
+          purchaseDate: '',
+          quantity: 1,
+          notes: ''
+        },
+        
+        toasts: [],
+        
+        // 5 Core Food Categories with Scientific Storage Recommendation (FDA/USDA)
+        categories: [
+          { id: 'dairy', name: 'นมและผลิตภัณฑ์นม', icon: '🥛', defaultDays: 7, guideText: 'นมสดพาสเจอไรซ์แช่เย็นได้ 5-7 วันหลังเปิดขวด, โยเกิร์ต 7-10 วัน, ชีส/เนย 1-3 เดือน' },
+          { id: 'bakery', name: 'เบเกอรี่และของแห้ง', icon: '🍞', defaultDays: 5, guideText: 'ขนมปังแผ่นแช่เย็นได้ 7-10 วัน หรือเก็บอุณหภูมิห้อง 3-5 วัน แช่ช่องฟรีซได้นานถึง 3 เดือน' },
+          { id: 'veggies', name: 'ผักและผลไม้', icon: '🥕', defaultDays: 7, guideText: 'ผักใบเขียว 3-5 วัน, แครอท มะเขือเทศ หรือผักหัว 1-2 สัปดาห์ (แนะนำแช่ช่องสำหรับผักด้านล่างสุด)' },
+          { id: 'meat', name: 'เนื้อสัตว์และอาหารสด', icon: '🥩', defaultDays: 2, guideText: 'เนื้อดิบและอาหารทะเลดิบเก็บได้ 1-2 วันในช่องธรรมดา หรือแช่ฟรีซได้ 3-4 เดือน, ไข่ดิบ 3-5 สัปดาห์' },
+          { id: 'others', name: 'อื่นๆ / ซอส', icon: '🍱', defaultDays: 14, guideText: 'อาหารปรุงสำเร็จพร้อมทาน 3-4 วัน, ซอสและเครื่องปรุงหลังเปิดฝาแช่เย็นเก็บรักษาต่อได้ 1-6 เดือน' }
+        ],
+        
+        commonEmojis: ['🥛', '🍞', '🥕', '🥣', '🥩', '🍎', '🥚', '🥬', '🧀', '🍌', '🍺', '🍫', '🍗', '🧅', '🧃', '🥪'],
+        
+        async init() {
+          // Load local storage items first
+          const stored = localStorage.getItem('my_smart_pantry_items');
+          if (stored) {
+            this.items = JSON.parse(stored);
+          } else {
+            this.loadMockData();
+          }
+          
+          // Load Firebase Config if exists
+          this.databaseURL = localStorage.getItem('my_smart_pantry_firebase_db_url') || '';
+          this.customDatabaseURL = this.databaseURL;
+          this.firebaseConnected = !!this.databaseURL;
+          
+          if (this.firebaseConnected) {
+            // If Cloud Sync code was configured, connect immediately
+            const savedCloudId = localStorage.getItem('my_smart_pantry_cloud_id');
+            if (savedCloudId) {
+              this.connectToFirebasePantry(savedCloudId);
+            }
+          }
+          
+          this.resetFormData();
+        },
+        
+        // Dynamically load mockup data relative to CURRENT date
+        loadMockData() {
+          const today = new Date();
+          const format = (d) => d.toISOString().split('T')[0];
+          
+          const tomorrow = new Date(today);
+          tomorrow.setDate(today.getDate() + 1);
+          
+          const in5Days = new Date(today);
+          in5Days.setDate(today.getDate() + 5);
+          
+          const in7Days = new Date(today);
+          in7Days.setDate(today.getDate() + 7);
+          
+          const yesterday = new Date(today);
+          yesterday.setDate(today.getDate() - 1);
+          
+          const preDate = (days) => {
+            const d = new Date(today);
+            d.setDate(today.getDate() - days);
+            return format(d);
+          };
+          
+          this.items = [
+            {
+              id: 'mock-1',
+              name: 'นมสด',
+              emoji: '🥛',
+              category: 'dairy',
+              purchaseDate: preDate(3),
+              expiryDate: format(tomorrow),
+              quantity: 1,
+              notes: 'รสจืด ขวดใหญ่ เปิดแล้ว'
+            },
+            {
+              id: 'mock-2',
+              name: 'ขนมปัง',
+              emoji: '🍞',
+              category: 'bakery',
+              purchaseDate: preDate(1),
+              expiryDate: format(in5Days),
+              quantity: 1,
+              notes: 'โฮลวีทแป้งญี่ปุ่น'
+            },
+            {
+              id: 'mock-3',
+              name: 'แครอท',
+              emoji: '🥕',
+              category: 'veggies',
+              purchaseDate: preDate(2),
+              expiryDate: format(in7Days),
+              quantity: 3,
+              notes: 'ถุงออร์แกนิก'
+            },
+            {
+              id: 'mock-4',
+              name: 'โยเกิร์ต',
+              emoji: '🥣',
+              category: 'dairy',
+              purchaseDate: preDate(4),
+              expiryDate: format(yesterday),
+              quantity: 2,
+              notes: 'รสสตรอว์เบอร์รีไขมันต่ำ'
+            }
+          ];
+          this.saveToStorage();
+        },
+        
+        saveToStorage() {
+          // 1. Save Locally
+          localStorage.setItem('my_smart_pantry_items', JSON.stringify(this.items));
+          
+          // 2. Sync to Firebase if active
+          if (this.cloudSyncEnabled && this.databaseURL && this.cloudId) {
+            this.syncStatus = 'loading';
+            
+            fetch(`${this.databaseURL}pantries/${this.cloudId}.json`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ items: this.items })
+            })
+            .then(res => {
+              if (!res.ok) throw new Error("Write failed");
+              this.syncStatus = 'success';
+              this.lastSyncTime = new Date().toLocaleTimeString('th-TH');
+            })
+            .catch(err => {
+              console.error("Firebase push failed:", err);
+              this.syncStatus = 'error';
+              this.addToast("ไม่สามารถซิงก์ขึ้นคลาวด์ได้", "warning");
+            });
+          }
+        },
+
+        saveToLocalStorageOnly() {
+          localStorage.setItem('my_smart_pantry_items', JSON.stringify(this.items));
+        },
+        
+        resetFormData() {
+          const todayStr = new Date().toISOString().split('T')[0];
+          this.formData = {
+            id: '',
+            name: '',
+            emoji: '🥛',
+            category: 'dairy',
+            expiryDate: '',
+            purchaseDate: todayStr,
+            quantity: 1,
+            notes: ''
+          };
+        },
+        
+        getDaysLeft(expiryDateStr) {
+          if (!expiryDateStr) return 0;
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          const expiry = new Date(expiryDateStr);
+          expiry.setHours(0,0,0,0);
+          const diffTime = expiry.getTime() - today.getTime();
+          return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        },
+        
+        getStatusColor(daysLeft) {
+          if (daysLeft < 0) return 'red';
+          if (daysLeft < 3) return 'yellow';
+          return 'green';
+        },
+        
+        getStatusText(daysLeft) {
+          if (daysLeft < 0) {
+            return `หมดอายุไปแล้ว ${Math.abs(daysLeft)} วันก่อน`;
+          } else if (daysLeft === 0) {
+            return 'หมดอายุวันนี้';
+          } else if (daysLeft === 1) {
+            return 'หมดอายุพรุ่งนี้';
+          } else if (daysLeft === 2) {
+            return 'เหลืออีก 2 วัน';
+          } else {
+            return `เหลืออีก ${daysLeft} วัน`;
+          }
+        },
+        
+        formatThaiDate(dateStr) {
+          if (!dateStr) return '-';
+          const options = { year: 'numeric', month: 'short', day: 'numeric' };
+          const date = new Date(dateStr);
+          return date.toLocaleDateString('th-TH', options);
+        },
+        
+        get thaiTodayDate() {
+          const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+          return new Date().toLocaleDateString('th-TH', options);
+        },
+        
+        get summaryStats() {
+          let expired = 0;
+          let expiringSoon = 0;
+          let fresh = 0;
+          
+          this.items.forEach(item => {
+            const days = this.getDaysLeft(item.expiryDate);
+            const status = this.getStatusColor(days);
+            if (status === 'red') expired++;
+            else if (status === 'yellow') expiringSoon++;
+            else fresh++;
+          });
+          
+          return {
+            total: this.items.length,
+            expired,
+            expiringSoon,
+            fresh,
+            urgentCount: expired + expiringSoon
+          };
+        },
+        
+        get summaryMessage() {
+          const urgent = this.summaryStats.urgentCount;
+          if (urgent === 0) {
+            return 'ยินดีด้วย! ไม่มีวัตถุดิบหมดอายุหรือใกล้หมดอายุในตู้เย็นของคุณเลย 😊';
+          }
+          return `คุณมีวัตถุดิบ ${urgent} อย่างที่ต้องรีบกินสัปดาห์นี้!`;
+        },
+        
+        get filteredItems() {
+          let list = [...this.items];
+          
+          // Search Query
+          if (this.searchQuery.trim() !== '') {
+            const query = this.searchQuery.toLowerCase();
+            list = list.filter(item => 
+              item.name.toLowerCase().includes(query) || 
+              (item.notes && item.notes.toLowerCase().includes(query))
+            );
+          }
+          
+          // Category Filter
+          if (this.selectedCategory !== 'all') {
+            list = list.filter(item => item.category === this.selectedCategory);
+          }
+          
+          // Status Filter
+          if (this.selectedStatus !== 'all') {
+            list = list.filter(item => {
+              const days = this.getDaysLeft(item.expiryDate);
+              const status = this.getStatusColor(days);
+              return status === this.selectedStatus;
+            });
+          }
+          
+          // Sorting
+          list.sort((a, b) => {
+            const daysA = this.getDaysLeft(a.expiryDate);
+            const daysB = this.getDaysLeft(b.expiryDate);
+            
+            if (this.sortBy === 'expiryAsc') {
+              return daysA - daysB;
+            } else if (this.sortBy === 'expiryDesc') {
+              return daysB - daysA;
+            } else if (this.sortBy === 'nameAsc') {
+              return a.name.localeCompare(b.name, 'th');
+            } else if (this.sortBy === 'purchaseDesc') {
+              return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
+            }
+            return 0;
+          });
+          
+          return list;
+        },
+        
+        get currentCategoryInfo() {
+          return this.categories.find(c => c.id === this.formData.category) || {};
+        },
+        
+        onCategoryChange() {
+          const cat = this.currentCategoryInfo;
+          if (cat && cat.icon) {
+            this.formData.emoji = cat.icon;
+          }
+        },
+        
+        applyRecommendedExpiry() {
+          const cat = this.currentCategoryInfo;
+          if (cat && cat.defaultDays) {
+            const baseDate = this.formData.purchaseDate ? new Date(this.formData.purchaseDate) : new Date();
+            baseDate.setDate(baseDate.getDate() + cat.defaultDays);
+            this.formData.expiryDate = baseDate.toISOString().split('T')[0];
+            this.addToast(`ตั้งวันหมดอายุแนะนำ (+${cat.defaultDays} วัน) เรียบร้อย!`, 'info');
+          }
+        },
+        
+        addToast(message, type = 'success') {
+          const id = Date.now();
+          this.toasts.push({ id, message, type });
+          setTimeout(() => {
+            this.toasts = this.toasts.filter(t => t.id !== id);
+          }, 3500);
+        },
+        
+        openAddModal() {
+          this.resetFormData();
+          const firstCat = this.categories[0];
+          this.formData.category = firstCat.id;
+          this.formData.emoji = firstCat.icon;
+          this.showAddModal = true;
+        },
+        
+        submitAdd() {
+          if (!this.formData.name.trim()) {
+            this.addToast('กรุณากรอกชื่อวัตถุดิบ', 'error');
+            return;
+          }
+          if (!this.formData.expiryDate) {
+            this.addToast('กรุณาระบุวันหมดอายุ', 'error');
+            return;
+          }
+          
+          const newItem = {
+            id: 'item-' + Date.now(),
+            name: this.formData.name,
+            emoji: this.formData.emoji,
+            category: this.formData.category,
+            purchaseDate: this.formData.purchaseDate,
+            expiryDate: this.formData.expiryDate,
+            quantity: parseInt(this.formData.quantity) || 1,
+            notes: this.formData.notes
+          };
+          
+          this.items.push(newItem);
+          this.saveToStorage();
+          this.showAddModal = false;
+          this.addToast(`เพิ่ม "${newItem.name}" ลงตู้เย็นเรียบร้อย!`, 'success');
+        },
+        
+        openEditModal(item) {
+          this.formData = { ...item };
+          this.showEditModal = true;
+        },
+        
+        submitEdit() {
+          if (!this.formData.name.trim()) {
+            this.addToast('กรุณากรอกชื่อวัตถุดิบ', 'error');
+            return;
+          }
+          if (!this.formData.expiryDate) {
+            this.addToast('กรุณาระบุวันหมดอายุ', 'error');
+            return;
+          }
+          
+          const index = this.items.findIndex(item => item.id === this.formData.id);
+          if (index !== -1) {
+            this.items[index] = { ...this.formData };
+            this.saveToStorage();
+            this.showEditModal = false;
+            this.addToast(`แก้ไขรายละเอียด "${this.formData.name}" สำเร็จ`, 'success');
+          }
+        },
+        
+        deleteItem(id, name) {
+          if (confirm(`คุณต้องการลบ "${name}" ใช่หรือไม่?`)) {
+            this.items = this.items.filter(item => item.id !== id);
+            this.saveToStorage();
+            this.addToast(`ลบ "${name}" ออกแล้ว`, 'error');
+          }
+        },
+        
+        consumeItem(id, name) {
+          this.items = this.items.filter(item => item.id !== id);
+          this.saveToStorage();
+          this.addToast(`ยินดีด้วย! ทาน "${name}" หมดเรียบร้อย 🎉`, 'success');
+        },
+        
+        resetFilters() {
+          this.selectedCategory = 'all';
+          this.selectedStatus = 'all';
+          this.searchQuery = '';
+          this.sortBy = 'expiryAsc';
+          this.addToast('รีเซ็ตตัวกรองทั้งหมดแล้ว', 'info');
+        },
+
+        // --- GOOGLE FIREBASE STORAGE & SYNC FUNCTIONS (วิธีที่ 2) ---
+        
+        initFirebase() {
+          return !!this.databaseURL;
+        },
+        
+        saveFirebaseConfig() {
+          let url = this.customDatabaseURL.trim();
+          if (!url) {
+            this.addToast("กรุณากรอกลิงก์ Realtime Database URL", "warning");
+            return;
+          }
+          if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            this.addToast("ลิงก์ฐานข้อมูลไม่ถูกต้อง ต้องขึ้นต้นด้วย https://", "error");
+            return;
+          }
+          if (!url.endsWith('/')) {
+            url += '/';
+          }
+          
+          this.databaseURL = url;
+          localStorage.setItem('my_smart_pantry_firebase_db_url', url);
+          this.firebaseConnected = true;
+          
+          this.addToast("บันทึกการเชื่อมต่อฐานข้อมูลสำเร็จ! กำลังซิงก์ข้อมูล...", "success");
+          this.showFirebaseConfig = false;
+          
+          const savedCloudId = localStorage.getItem('my_smart_pantry_cloud_id');
+          if (savedCloudId) {
+            this.connectToFirebasePantry(savedCloudId);
+          }
+        },
+        
+        resetFirebaseConfig() {
+          if (confirm("คุณต้องการล้างข้อมูลเชื่อมต่อฐานข้อมูลใช่หรือไม่? (การซิงก์คลาวด์จะถูกยกเลิกด้วย)")) {
+            this.disconnectFirebaseListener();
+            this.cloudSyncEnabled = false;
+            this.cloudId = '';
+            this.databaseURL = '';
+            this.customDatabaseURL = '';
+            this.firebaseConnected = false;
+            
+            localStorage.removeItem('my_smart_pantry_firebase_db_url');
+            localStorage.removeItem('my_smart_pantry_cloud_id');
+            
+            this.addToast("ล้างข้อมูลเชื่อมต่อทั้งหมดเรียบร้อย", "info");
+          }
+        },
+        
+        generateRandomCode() {
+          const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+          let result = '';
+          for (let i = 0; i < 8; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          return 'pantry-' + result;
+        },
+        
+        createNewCloudPantry() {
+          if (!this.firebaseConnected) {
+            this.addToast("กรุณาตั้งค่า Firebase ก่อนเชื่อมต่อตู้เย็นร่วมกัน", "warning");
+            this.showFirebaseConfig = true;
+            return;
+          }
+          const newCode = this.generateRandomCode();
+          this.connectToFirebasePantry(newCode);
+          this.generatedCode = newCode;
+          this.showCodeModal = true;
+          this.addToast(`สร้างระบบแชร์ตู้เย็นสำเร็จ!`, 'success');
+        },
+        
+        async connectToFirebasePantry(code) {
+          if (!code) {
+            this.addToast('กรุณาระบุรหัสแชร์ครอบครัว', 'warning');
+            return;
+          }
+          if (!this.initFirebase()) {
+            this.addToast("กรุณาตั้งค่า Firebase ก่อนเชื่อมต่อตู้เย็นร่วมกัน", "warning");
+            this.showFirebaseConfig = true;
+            return;
+          }
+          
+          this.syncStatus = 'loading';
+          this.cloudId = code;
+          localStorage.setItem('my_smart_pantry_cloud_id', this.cloudId);
+          this.inputCloudId = '';
+          
+          this.disconnectFirebaseListener();
+          
+          try {
+            const streamUrl = `${this.databaseURL}pantries/${this.cloudId}.json`;
+            this.eventSource = new EventSource(streamUrl);
+            
+            this.eventSource.addEventListener('put', (e) => {
+              try {
+                const payload = JSON.parse(e.data);
+                if (payload && payload.path === '/') {
+                  if (payload.data && Array.isArray(payload.data.items)) {
+                    const cloudItems = payload.data.items;
+                    const localStr = JSON.stringify(this.items);
+                    const cloudStr = JSON.stringify(cloudItems);
+                    
+                    if (localStr !== cloudStr) {
+                      this.items = cloudItems;
+                      this.saveToLocalStorageOnly();
+                      this.addToast('อัปเดตข้อมูลตู้เย็นเรียลไทม์เรียบร้อย 🔄', 'info');
+                    }
+                  } else if (payload.data === null) {
+                    // Database is empty under this cloudId, initialize it with local items!
+                    this.uploadLocalItemsToCloud();
+                  }
+                }
+                
+                this.cloudSyncEnabled = true;
+                this.syncStatus = 'success';
+                this.lastSyncTime = new Date().toLocaleTimeString('th-TH');
+              } catch (err) {
+                console.error("Parse event data failed:", err);
+              }
+            });
+            
+            this.eventSource.onerror = (error) => {
+              console.error("EventSource subscription failed:", error);
+              this.syncStatus = 'error';
+            };
+            
+          } catch (error) {
+            console.error("Firebase connection error:", error);
+            this.syncStatus = 'error';
+            this.addToast("เชื่อมต่อตู้เย็นล้มเหลว", "error");
+          }
+        },
+        
+        uploadLocalItemsToCloud() {
+          if (!this.databaseURL || !this.cloudId) return;
+          fetch(`${this.databaseURL}pantries/${this.cloudId}.json`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ items: this.items })
+          })
+          .then(res => {
+            if (!res.ok) throw new Error("Write failed");
+          })
+          .catch(err => {
+            console.error("Initial cloud push failed:", err);
+          });
+        },
+        
+        disconnectFirebaseListener() {
+          if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+          }
+        },
+        
+        disconnectCloud() {
+          if (confirm('คุณต้องการยกเลิกการเชื่อมต่อคลาวด์ใช่หรือไม่? (ข้อมูลจะกลับมาบันทึกในอุปกรณ์เครื่องนี้เครื่องเดียวและไม่ซิงก์กันอีก)')) {
+            this.disconnectFirebaseListener();
+            this.cloudSyncEnabled = false;
+            this.cloudId = '';
+            localStorage.removeItem('my_smart_pantry_cloud_id');
+            this.addToast('ยกเลิกการซิงก์คลาวด์แล้ว ข้อมูลจะบันทึกในเครื่องนี้เท่านั้น', 'info');
+          }
+        },
+        
+        copyCloudId() {
+          navigator.clipboard.writeText(this.cloudId).then(() => {
+            this.addToast('คัดลอกรหัสแชร์ตู้เย็นลงคลิปบอร์ดแล้ว! 📋');
+          }).catch(err => {
+            console.error('Copy failed:', err);
+          });
+        }
+      };
+    }
+  </script>
+</body>
+</html>
