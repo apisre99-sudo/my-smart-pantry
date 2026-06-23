@@ -214,8 +214,19 @@
             </button>
             
             <!-- Connect with existing code input -->
-            <div class="flex items-center border border-jp-border rounded-full bg-jp-bg/30 pl-3.5 pr-1 py-1 w-full sm:w-auto mt-1 sm:mt-0">
-              <input type="text" x-model="inputCloudId" placeholder="ใส่รหัสแชร์ครอบครัวเดิม..." class="bg-transparent text-xs font-medium text-jp-text outline-none w-36 sm:w-40" />
+            <div class="flex items-center border border-jp-border rounded-full bg-jp-bg/30 pl-3.5 pr-1 py-1 w-full sm:w-auto mt-1 sm:mt-0 gap-1.5">
+              <input :type="showInputCloudId ? 'text' : 'password'" x-model="inputCloudId" placeholder="ใส่รหัสแชร์ครอบครัวเดิม..." class="bg-transparent text-xs font-medium text-jp-text outline-none w-32 sm:w-36" />
+              
+              <!-- Eye Toggle Button -->
+              <button @click="showInputCloudId = !showInputCloudId" class="text-jp-muted hover:text-jp-text p-0.5 transition-colors shrink-0" title="แสดง/ซ่อนรหัส">
+                <template x-if="!showInputCloudId">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                </template>
+                <template x-if="showInputCloudId">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                </template>
+              </button>
+
               <button @click="connectToFirebasePantry(inputCloudId.trim().toLowerCase())" class="px-3.5 py-1.5 bg-jp-cream hover:bg-jp-cream-dark text-jp-text rounded-full text-[10px] font-bold transition-all shrink-0">
                 เชื่อมต่อ
               </button>
@@ -304,13 +315,24 @@
                   <span>ลิงก์ Realtime Database URL (คัดลอกจากแถบสีขาวบนหน้าจอ Realtime Database):</span>
                   <span class="text-rose-500 font-bold">*จำเป็น</span>
                 </label>
-                <input type="text" x-model="customDatabaseURL" placeholder="เช่น https://my-smart-pantry-default-rtdb.firebaseio.com/" class="w-full px-3 py-2 text-xs rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-mono text-jp-text bg-white shadow-inner-soft" />
+                <div class="relative flex items-center">
+                  <input :type="showDatabaseURL ? 'text' : 'password'" x-model="customDatabaseURL" placeholder="เช่น https://my-smart-pantry-default-rtdb.firebaseio.com/" class="w-full pl-3.5 pr-10 py-2 text-xs rounded-xl border border-jp-border focus:ring-2 focus:ring-jp-sage outline-none font-mono text-jp-text bg-white shadow-inner-soft" />
+                  <!-- Eye Toggle Button -->
+                  <button @click="showDatabaseURL = !showDatabaseURL" class="absolute right-3 text-jp-muted hover:text-jp-text p-0.5 transition-colors shrink-0" title="แสดง/ซ่อนลิงก์">
+                    <template x-if="!showDatabaseURL">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    </template>
+                    <template x-if="showDatabaseURL">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                    </template>
+                  </button>
+                </div>
               </div>
               
               <!-- Active Database URL Display -->
               <div x-show="firebaseConnected" class="text-[10px] text-jp-muted bg-jp-bg/50 p-2 rounded-lg border border-jp-border/40 font-medium">
                 <span>🔗 ลิงก์ฐานข้อมูลที่ระบบกำลังเรียกใช้:</span>
-                <code class="block mt-0.5 font-mono text-[9px] text-jp-text select-all break-all" x-text="databaseURL"></code>
+                <code class="block mt-0.5 font-mono text-[9px] text-jp-text select-all break-all" x-text="showDatabaseURL ? databaseURL : 'https://••••••••••••••••••••••••••••••••••••/'"></code>
               </div>
               
               <div class="flex items-center gap-2 pt-1">
@@ -898,6 +920,7 @@
         syncStatus: 'success',
         lastSyncTime: '-',
         showCloudId: false,
+        showInputCloudId: false,
         
         // Firebase Configuration States
         showFirebaseConfig: false,
@@ -905,6 +928,7 @@
         databaseURL: '',
         firebaseConnected: false,
         eventSource: null,
+        showDatabaseURL: false,
         
         // Form Inputs Model
         formData: {
