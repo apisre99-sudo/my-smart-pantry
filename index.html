@@ -157,7 +157,7 @@
 
     <!-- DASHBOARD SUMMARY BANNER -->
     <div class="bg-jp-cream border border-jp-border/70 rounded-2xl p-4 md:p-6 mb-6 flex items-start sm:items-center gap-4 transition-all duration-300">
-      <div class="bg-white p-3 rounded-2xl shadow-soft text-2xl shrink-0 flex items-center justify-center">
+      <div class="bg-white p-3 rounded-2xl shadow-soft text-2xl shrink-0 flex items-center justify-center" x-text="summaryEmoji">
         💡
       </div>
       <div class="flex-1">
@@ -1134,12 +1134,28 @@
           };
         },
         
+        get summaryEmoji() {
+          const { expired, expiringSoon } = this.summaryStats;
+          if (expired > 0) return '🚨';
+          if (expiringSoon > 0) return '⚠️';
+          return '😊';
+        },
+
         get summaryMessage() {
-          const urgent = this.summaryStats.urgentCount;
-          if (urgent === 0) {
-            return 'ยินดีด้วย! ไม่มีวัตถุดิบหมดอายุหรือใกล้หมดอายุในตู้เย็นของคุณเลย 😊';
+          const { expired, expiringSoon } = this.summaryStats;
+          if (expired === 0 && expiringSoon === 0) {
+            return 'ยินดีด้วย! ไม่มีวัตถุดิบหมดอายุหรือใกล้หมดอายุในตู้เย็นเลย 😊';
           }
-          return `คุณมีวัตถุดิบ ${urgent} อย่างที่ต้องรีบกินสัปดาห์นี้!`;
+          
+          let parts = [];
+          if (expired > 0) {
+            parts.push(`หมดอายุแล้ว ${expired} อย่าง (ควรนำออก/ทิ้ง)`);
+          }
+          if (expiringSoon > 0) {
+            parts.push(`ใกล้หมดอายุ ${expiringSoon} อย่าง (ควรรีบทาน)`);
+          }
+          
+          return 'พบวัตถุดิบ' + parts.join(' และ ');
         },
         
         get filteredItems() {
